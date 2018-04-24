@@ -92,16 +92,37 @@ Options:
   ARCHIVEPATH=$(realpath $ARCHIVE)
 # }}}
 
+# determine filetype and set command {{{
+  FILECMD="$(which file) -b --mime-type"
+  ARCHIVETYPE=$($FILECMD $ARCHIVEPATH)
+# }}}
+
 # unpack and build {{{
   cd $TMPDIR/unpack
   $ZCAT $INITRD | $CPIO -idmv 1>/dev/null 2>&1 ||:
-  DPKG=$(which dpkg)
-  if [ ! -x "$DPKG" ]; then
-    echo "Error: dpkg not executeable"
-    exit 1
-  fi
-  $DPKG -x $ARCHIVEPATH $TMPDIR/unpack
-  find . | cpio -o -c 2>/dev/null | gzip -9 > $INITRDPATH.new
+
+  case $ARCHIVETYPE in
+    application/vnd.debian.binary-package)
+      DPKG=$(which dpkg)
+      if [ ! -x "$DPKG" ]; then
+        echo "Error: dpkg not executeable"
+        exit 1
+      fi
+      $DPKG -x $ARCHIVEPATH $TMPDIR/unpack
+      ;;
+    application/x-rpm)
+      RPM2CPIO=$(which rpm2cpio)
+      if [ ! -x "$RPM2CPIO" ]; then
+        echo "Error: rpm2cpio not executeable"
+        exit 1
+      fi
+      $RPM2CPIO $ARCHIVEPATH | $CPIO -idmv
+      ;;
+    *)
+      echo "Archivetype $ARCHIVETYPE not supported"
+      exit 1
+  esac
+  find . | $CPIO -o -c 2>/dev/null | gzip -9 > $INITRDPATH.new
   echo "Info: New initrd $INITRD.new has been created"
 # }}}
 
